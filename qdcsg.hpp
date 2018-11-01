@@ -1,11 +1,36 @@
+/*
+    MIT License
+
+    Copyright (c) 2018 Cordell Barron
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+*/
+
+
 #ifndef QDCSG_HPP
 #define QDCSG_HPP
 
-#include <vector>
+#include <algorithm>
 #include <list>
 #include <memory>
-#include <algorithm>
-#include <functional>
+#include <vector>
 
 namespace qdcsg
 {
@@ -50,48 +75,89 @@ namespace qdcsg
         std::vector<triangle> insideTriangles_;
     };
 
+    static float epsilon = 0.001f;
+
     namespace impl
     {
-        static float epsilon_ = 0.001f;
+        float magnitude(const vertex& v)
+        {
+            return sqrt((v.x_ * v.x_) + (v.y_ * v.y_) + (v.z_ * v.z_));
+        }
 
         vertex unitise(const vertex& v)
         {
-
+            float oneOverMagnitude = 1.0f / magnitude(v);
+            return vertex(v.x_ * oneOverMagnitude, v.y_ * oneOverMagnitude, v.z_ * oneOverMagnitude);
         }
 
         vertex subtract(const vertex& a, const vertex& b)
         {
-
+            return vertex(a.x_ - b.x_, a.y_ - b.y_, a.z_ - b.z_);
         }
 
         vertex cross(const vertex& a, const vertex& b)
         {
-
+            return vertex((a.y_ * b.z_) - (a.z_ * b.y_), (a.z_ * b.x_) - (a.x_ * b.z_), (a.x_ * b.y_) - (a.y_ * b.x_));
         }
 
         float dot(const vertex& a, const vertex& b)
         {
-
+            return (a.x_ * b.x_) + (a.y_ * b.y_) + (a.z_ * b.z_);
         }
 
         bool equals(const vertex& a, const vertex& b, float e)
         {
-
+            return (abs(a.x_ - b.x_) < e && abs(a.y_ - b.y_) < e && abs(a.z_ - b.z_) < e);
         }
 
         bool equals(const vertex& a, const vertex& b)
         {
-
+            return (a.x_ == b.x_ && a.y_ == b.y_ && a.z_ == b.z_);
         }
 
-        bool validateTriangle(const vertex& a, const vertex& b, const vertex& c)
+        float area(const vertex& a, const vertex& b, const vertex& c)
         {
+            vertex ab = subtract(b, a);
+            float abMag = magnitude(ab);
+            vertex ac = subtract(a, c);
+            float acMag = magnitude(ac);
 
+            // if either points equal each other or all 3 are colinear... maybe use e?
+            if ( equals(a, b, epsilon) || equals(a, c, epsilon) || equals(b, c, epsilon))
+                return 0;
+
+            vertex acUnit = unitise(ac);
+            float cosThita = dot(unitise(ab), acUnit);
+
+
+            vertex d(a.x_ + (acUnit.x_ * cosThita), a.y_ + (acUnit.y_ * cosThita), a.z_ + (acUnit.z_ * cosThita));
+
+            vertex bd = subtract(b, d);
+            float bdMag = magnitude(bd);
+
+            return 0.5f * (bdMag * acMag);
+        }
+
+        bool validateTriangle(const triangle& t, const vertex& a, const vertex& b, const vertex& c)
+        {
+            if (t.a_ == t.b_ || t.a_ == t.c_ || t.b_ == t.c_)
+                return false;
+
+            if ( area(a, b, c) < epsilon)
+                return false;
+
+            return true;
         }
 
         vertex rayPlaneIntersection(const vertex& rP, const vertex& rD, const vertex& pP, const vertex& pN)
         {
-
+            float dotrDpN = dot(rD, pN);
+            if (dotrDpN)
+            {
+                float s = dot(subtract(pP, rP), pN) / dotrDpN;
+                return vertex(rP.x_ + (rD.x_ * s), rP.y_ + (rD.y_ * s), rP.z_ + (rD.z_ * s));
+            }
+            throw std::exception("RayAndPlaneNormalAreParrallel");
         }
 
         class bspTree
@@ -145,7 +211,7 @@ namespace qdcsg
                     float thita = dot(d, normal_);
 
                     // clamp this value? i.e if close to plane, clamp to plane...
-                    if (abs(thita) < epsilon_)
+                    if (abs(thita) < epsilon)
                         thita = 0;
 
                     return thita;
@@ -207,11 +273,11 @@ namespace qdcsg
                         const vertex& c = workingVertices[currentTriangle->c_];
 
                         // validate the triangle...
-                        if (!validateTriangle(a, b, c))
+                        if (!validateTriangle(*currentTriangle, a, b, c))
                         {
                             // if the triangle is invalid... we ignore it so remove from our working list and start traversal with next triangle...
                             workingTriangles.erase(currentTriangle);
-                            currentNode = 0;// currentNode.reset();
+                            currentNode = 0;
                             continue;
                         }
 
@@ -228,7 +294,7 @@ namespace qdcsg
                             {
                                 // if there is no outside node, we need to create a new one with this triangles plane.
                                 currentNode->outside_.reset(new node(a, b, c));
-                                currentNode = 0;// currentNode.reset();
+                                currentNode = 0;
                             }
                         }
                         // Otherwise if the current triangle is inside or onplane of current node... (for onplane, assume triangle is 'inside')
@@ -241,7 +307,7 @@ namespace qdcsg
                             {
                                 // if there is no inside node, we need to create a new one with this triangles plane.
                                 currentNode->inside_.reset(new node(a, b, c));
-                                currentNode = 0;// currentNode.reset();
+                                currentNode = 0;
                             }
                         }
                         // Otherwise this triangle straddles the current node plane... so we need to split accordinglly...
@@ -259,7 +325,7 @@ namespace qdcsg
                                 {
                                     // if there is no inside node, we need to create a new one with this triangles plane.
                                     currentNode->inside_.reset(new node(a, b, c));
-                                    currentNode = 0;// currentNode.reset();
+                                    currentNode = 0;
                                 }
                             }
                             else if (splitResult->outsideTriangles_.size() == 1 && splitResult->insideTriangles_.empty())
@@ -271,7 +337,7 @@ namespace qdcsg
                                 {
                                     // if there is no inside node, we need to create a new one with this triangles plane.
                                     currentNode->outside_.reset(new node(a, b, c));
-                                    currentNode = 0;// currentNode.reset();
+                                    currentNode = 0;
                                 }
                             }
                             else
@@ -279,7 +345,7 @@ namespace qdcsg
                                 // Otherwise we need to add these split triangles to our workingtriangle list and start traversal again...
 
                                 // add the vertices...
-                                unsigned int vertexOffset = workingVertices.size();
+                                unsigned int vertexOffset = static_cast<unsigned int>(workingVertices.size());
                                 workingVertices.insert(workingVertices.end(), splitResult->vertices_.begin(), splitResult->vertices_.end());
 
                                 // add thes triangles to our working list, ammending the vertex offsets to cater for new vertices...
@@ -319,6 +385,9 @@ namespace qdcsg
                 // We need to create a working list of the current triangles from the mesh...
                 std::list<triangle> workingTriangles(intersectionMesh.triangles_.begin(), intersectionMesh.triangles_.end());
 
+                // copy the current vertices to our output...
+                output->vertices_ = intersectionMesh.vertices_;
+
                 // For each triangle from our working list... we push it through this tree and and either split triangles adding them to inside or outside...
                 // or keep adding to inside or outside...
                 while (!workingTriangles.empty())
@@ -326,18 +395,18 @@ namespace qdcsg
                     // get the triangle itr
                     std::list<triangle>::iterator currentTriangle = workingTriangles.begin();
 
+                    const vertex& a = output->vertices_[currentTriangle->a_];
+                    const vertex& b = output->vertices_[currentTriangle->b_];
+                    const vertex& c = output->vertices_[currentTriangle->c_];
+
                     // start to traverse the tree to see if this triangle is inside or outside the tree..
                     node* currentNode = root_.get();
 
                     // start from root node, and traverse, calculating if triangle is infront or behind node plane...
                     while (currentNode)
                     {
-                        const vertex& a = intersectionMesh.vertices_[currentTriangle->a_];
-                        const vertex& b = intersectionMesh.vertices_[currentTriangle->b_];
-                        const vertex& c = intersectionMesh.vertices_[currentTriangle->c_];
-
                         // validate the triangle...
-                        if (!validateTriangle(a, b, c))
+                        if (!validateTriangle(*currentTriangle, a, b, c))
                         {
                             // if the triangle is invalid... we ignore it so remove from our working list and start traversal with next working triangle...
                             workingTriangles.erase(currentTriangle);
@@ -411,9 +480,6 @@ namespace qdcsg
                             // we split the triangles and generate the correct 
                             std::shared_ptr<result> splitResult = split(intersections, a, b, c, currentTriangle->id_, currentNode->GetA(), currentNode->GetNormal());
 
-                            // Pass the split result to our callback if supplied...
-                            node* currentNodeForCallback = currentNode;
-
                             // Our split result will generate one or more triangles... if there is only one triangle, this means that one or more of the split triangles was invalid
                             if (splitResult->insideTriangles_.size() == 1 && splitResult->outsideTriangles_.empty())
                             {
@@ -424,7 +490,7 @@ namespace qdcsg
                                 else
                                 {
                                     output->insideTriangles_.push_back(*currentTriangle);
-                                    currentNode = 0; //currentNode.reset();
+                                    currentNode = 0;
                                 }
                             }
                             else if (splitResult->outsideTriangles_.size() == 1 && splitResult->outsideTriangles_.empty())
@@ -436,7 +502,7 @@ namespace qdcsg
                                 else
                                 {
                                     output->outsideTriangles_.push_back(*currentTriangle);
-                                    currentNode = 0; // currentNode.reset();
+                                    currentNode = 0;
                                 }
                             }
                             else
@@ -444,11 +510,11 @@ namespace qdcsg
                                 // if these are new split triangles to add... we need to ammend them to our list for traversal...
 
                                 // add the vertices...
-                                unsigned int vertexOffset = output->vertices_.size();
+                                unsigned int vertexOffset = static_cast<unsigned int>(output->vertices_.size());
                                 output->vertices_.insert(output->vertices_.end(), splitResult->vertices_.begin(), splitResult->vertices_.end());
 
                                 // add thes triangles to our working list, ammending the vertex offsets to cater for new vertices...
-                                for (std::vector<triangle>::iterator insideItr = splitResult->outsideTriangles_.begin(); insideItr != splitResult->insideTriangles_.end(); ++insideItr)
+                                for (std::vector<triangle>::iterator insideItr = splitResult->insideTriangles_.begin(); insideItr != splitResult->insideTriangles_.end(); ++insideItr)
                                 {
                                     insideItr->a_ += vertexOffset;
                                     insideItr->b_ += vertexOffset;
@@ -474,6 +540,8 @@ namespace qdcsg
 
                     }
                 }
+
+                return output;
             }
 
             
@@ -503,7 +571,7 @@ namespace qdcsg
                         // add the two triangles... if b is behind, a must be infront...
                         if (intersections.B() < 0)
                         {
-                            insideTriangle = triangle(triangleA, triangleB, triangleC, ID);//output->CreateTriangle(Mesh::IOFlag::INSIDE, triangleA, triangleB, intersection1, ID);
+                            insideTriangle = triangle(triangleA, triangleB, intersection1, ID);//output->CreateTriangle(Mesh::IOFlag::INSIDE, triangleA, triangleB, intersection1, ID);
                             outsideTriangle = triangle(intersection1, triangleC, triangleA, ID);
                         }
                         else
@@ -549,10 +617,10 @@ namespace qdcsg
                     else
                         throw std::exception("CSGSplitInvalid");
 
-                    if (validateTriangle(output->vertices_[insideTriangle.a_], output->vertices_[insideTriangle.b_], output->vertices_[insideTriangle.c_]))
+                    if (validateTriangle(insideTriangle, output->vertices_[insideTriangle.a_], output->vertices_[insideTriangle.b_], output->vertices_[insideTriangle.c_]))
                         output->insideTriangles_.push_back(insideTriangle);
 
-                    if (validateTriangle(output->vertices_[outsideTriangle.a_], output->vertices_[outsideTriangle.b_], output->vertices_[outsideTriangle.c_]))
+                    if (validateTriangle(outsideTriangle, output->vertices_[outsideTriangle.a_], output->vertices_[outsideTriangle.b_], output->vertices_[outsideTriangle.c_]))
                         output->outsideTriangles_.push_back(outsideTriangle);
                 }
                 else
@@ -577,105 +645,105 @@ namespace qdcsg
                         if (aDirection < 0)
                         {
                             // b and c must be infront...
-                            result->vertices_.push_back(vectorOps.RayPlaneIntersectionPoint(A, vectorOps.Unitise(vectorOps.Subtract(B, A)), planePosition, planeNormal));
-                            result->vertices_.push_back(vectorOps.RayPlaneIntersectionPoint(A, vectorOps.Unitise(vectorOps.Subtract(C, A)), planePosition, planeNormal));
+                            output->vertices_.push_back(rayPlaneIntersection(A, unitise(subtract(B, A)), planePosition, planeNormal));
+                            output->vertices_.push_back(rayPlaneIntersection(A, unitise(subtract(C, A)), planePosition, planeNormal));
 
                             // calculate the inside triangle...
-                            insideTriangle = result->CreateTriangle(Mesh::IOFlag::INSIDE, triangleA, intersection1, intersection2, ID);// , result->vertices_[triangleA], result->vertices_[intersection1], result->vertices_[intersection2]);
+                            insideTriangle = triangle(triangleA, intersection1, intersection2, ID);// , result->vertices_[triangleA], result->vertices_[intersection1], result->vertices_[intersection2]);
 
                                                                                                                                         // calculate the outside triangles...
-                            outsideTriangle1 = result->CreateTriangle(Mesh::IOFlag::OUTSIDE, intersection1, triangleB, triangleC, ID);// , result->vertices_[intersection1], result->vertices_[triangleB], result->vertices_[triangleC]);
-                            outsideTriangle2 = result->CreateTriangle(Mesh::IOFlag::OUTSIDE, triangleC, intersection2, intersection1, ID);// , result->vertices_[triangleC], result->vertices_[intersection2], result->vertices_[intersection1]);
+                            outsideTriangle1 = triangle(intersection1, triangleB, triangleC, ID);// , result->vertices_[intersection1], result->vertices_[triangleB], result->vertices_[triangleC]);
+                            outsideTriangle2 = triangle(triangleC, intersection2, intersection1, ID);// , result->vertices_[triangleC], result->vertices_[intersection2], result->vertices_[intersection1]);
                         }
                         else if (bDirection < 0)
                         {
                             // c and a must be infront...
-                            result->vertices_.push_back(vectorOps.RayPlaneIntersectionPoint(B, vectorOps.Unitise(vectorOps.Subtract(C, B)), planePosition, planeNormal));
-                            result->vertices_.push_back(vectorOps.RayPlaneIntersectionPoint(B, vectorOps.Unitise(vectorOps.Subtract(A, B)), planePosition, planeNormal));
+                            output->vertices_.push_back(rayPlaneIntersection(B, unitise(subtract(C, B)), planePosition, planeNormal));
+                            output->vertices_.push_back(rayPlaneIntersection(B, unitise(subtract(A, B)), planePosition, planeNormal));
 
                             // calculate the inside triangle...
-                            insideTriangle = result->CreateTriangle(Mesh::IOFlag::INSIDE, triangleB, intersection1, intersection2, ID);// , result->vertices_[triangleB], result->vertices_[intersection1], result->vertices_[intersection2]);
+                            insideTriangle = triangle(triangleB, intersection1, intersection2, ID);// , result->vertices_[triangleB], result->vertices_[intersection1], result->vertices_[intersection2]);
 
                                                                                                                                         // calculate the outside triangles...
-                            outsideTriangle1 = result->CreateTriangle(Mesh::IOFlag::OUTSIDE, intersection1, triangleC, triangleA, ID);//, result->vertices_[intersection1], result->vertices_[triangleC], result->vertices_[triangleA]);
-                            outsideTriangle2 = result->CreateTriangle(Mesh::IOFlag::OUTSIDE, triangleA, intersection2, intersection1, ID);// , result->vertices_[triangleA], result->vertices_[intersection2], result->vertices_[intersection1]);
+                            outsideTriangle1 = triangle(intersection1, triangleC, triangleA, ID);//, result->vertices_[intersection1], result->vertices_[triangleC], result->vertices_[triangleA]);
+                            outsideTriangle2 = triangle(triangleA, intersection2, intersection1, ID);// , result->vertices_[triangleA], result->vertices_[intersection2], result->vertices_[intersection1]);
                         }
                         else if (cDirection < 0)
                         {
                             // a and b must be infront...
-                            result->vertices_.push_back(vectorOps.RayPlaneIntersectionPoint(C, vectorOps.Unitise(vectorOps.Subtract(C, A)), planePosition, planeNormal));
-                            result->vertices_.push_back(vectorOps.RayPlaneIntersectionPoint(C, vectorOps.Unitise(vectorOps.Subtract(C, B)), planePosition, planeNormal));
+                            output->vertices_.push_back(rayPlaneIntersection(C, unitise(subtract(C, A)), planePosition, planeNormal));
+                            output->vertices_.push_back(rayPlaneIntersection(C, unitise(subtract(C, B)), planePosition, planeNormal));
 
                             // calculate the inside triangle...
-                            insideTriangle = result->CreateTriangle(Mesh::IOFlag::INSIDE, triangleC, intersection1, intersection2, ID);// , result->vertices_[triangleC], result->vertices_[intersection1], result->vertices_[intersection2]);
+                            insideTriangle = triangle(triangleC, intersection1, intersection2, ID);// , result->vertices_[triangleC], result->vertices_[intersection1], result->vertices_[intersection2]);
 
                                                                                                                                         // calculate the outside triangles...
-                            outsideTriangle1 = result->CreateTriangle(Mesh::IOFlag::OUTSIDE, intersection1, triangleA, triangleB, ID);// , result->vertices_[intersection1], result->vertices_[triangleA], result->vertices_[triangleB]);
-                            outsideTriangle2 = result->CreateTriangle(Mesh::IOFlag::OUTSIDE, triangleB, intersection2, intersection1, ID);// , result->vertices_[triangleB], result->vertices_[intersection2], result->vertices_[intersection1]);
+                            outsideTriangle1 = triangle(intersection1, triangleA, triangleB, ID);// , result->vertices_[intersection1], result->vertices_[triangleA], result->vertices_[triangleB]);
+                            outsideTriangle2 = triangle(triangleB, intersection2, intersection1, ID);// , result->vertices_[triangleB], result->vertices_[intersection2], result->vertices_[intersection1]);
                         }
 
                         // if the inside triangle is invalid... add the original triangle as the outside triangle.
-                        if (!result->ValidateTriangle(result->vertices_[insideTriangle->a()], result->vertices_[insideTriangle->b()], result->vertices_[insideTriangle->c()], *insideTriangle))
-                            result->outside_.push_back(result->CreateTriangle(Mesh::IOFlag::OUTSIDE, triangleA, triangleB, triangleC, ID));// , result->vertices_[triangleA], result->vertices_[triangleB], result->vertices_[triangleC]));
+                        if (!validateTriangle(insideTriangle, output->vertices_[insideTriangle.a_], output->vertices_[insideTriangle.b_], output->vertices_[insideTriangle.c_]))
+                            output->outsideTriangles_.push_back(triangle(triangleA, triangleB, triangleC, ID));// , result->vertices_[triangleA], result->vertices_[triangleB], result->vertices_[triangleC]));
                         else
                         {
-                            result->inside_.push_back(insideTriangle);
+                            output->insideTriangles_.push_back(insideTriangle);
 
                             // outside triangle1 and outside triangle2 must be valid
-                            result->outside_.push_back(outsideTriangle1);
-                            result->outside_.push_back(outsideTriangle2);
+                            output->outsideTriangles_.push_back(outsideTriangle1);
+                            output->outsideTriangles_.push_back(outsideTriangle2);
                         }
                     }
 
                     // Otherwise it is inside heavy...
                     else
                     {
-                        std::shared_ptr<Triangle> outsideTriangle, insideTriangle1, insideTriangle2;
+                        triangle outsideTriangle, insideTriangle1, insideTriangle2;
 
                         // if a is infront...
                         if (aDirection > 0)
                         {
                             // b and c must be behind...
-                            result->vertices_.push_back(vectorOps.RayPlaneIntersectionPoint(A, vectorOps.Unitise(vectorOps.Subtract(B, A)), planePosition, planeNormal));
-                            result->vertices_.push_back(vectorOps.RayPlaneIntersectionPoint(A, vectorOps.Unitise(vectorOps.Subtract(C, A)), planePosition, planeNormal));
+                            output->vertices_.push_back(rayPlaneIntersection(A, unitise(subtract(B, A)), planePosition, planeNormal));
+                            output->vertices_.push_back(rayPlaneIntersection(A, unitise(subtract(C, A)), planePosition, planeNormal));
 
                             // calculate the outside triangle...
-                            outsideTriangle = result->CreateTriangle(Mesh::IOFlag::OUTSIDE, triangleA, intersection1, intersection2, ID);
+                            outsideTriangle = triangle(triangleA, intersection1, intersection2, ID);
 
                             // calculate the inside triangles...
-                            insideTriangle1 = result->CreateTriangle(BSP::Mesh::IOFlag::INSIDE, intersection1, triangleB, triangleC, ID);
-                            insideTriangle2 = result->CreateTriangle(BSP::Mesh::IOFlag::INSIDE, triangleC, intersection2, intersection1, ID);
+                            insideTriangle1 = triangle(intersection1, triangleB, triangleC, ID);
+                            insideTriangle2 = triangle(triangleC, intersection2, intersection1, ID);
                         }
                         else if (bDirection > 0)
                         {
                             // c and a must be behind...
-                            result->vertices_.push_back(vectorOps.RayPlaneIntersectionPoint(B, vectorOps.Unitise(vectorOps.Subtract(C, B)), planePosition, planeNormal));
-                            result->vertices_.push_back(vectorOps.RayPlaneIntersectionPoint(B, vectorOps.Unitise(vectorOps.Subtract(A, B)), planePosition, planeNormal));
+                            output->vertices_.push_back(rayPlaneIntersection(B, unitise(subtract(C, B)), planePosition, planeNormal));
+                            output->vertices_.push_back(rayPlaneIntersection(B, unitise(subtract(A, B)), planePosition, planeNormal));
 
                             // calculate the inside triangle...
-                            outsideTriangle = result->CreateTriangle(BSP::Mesh::IOFlag::OUTSIDE, triangleB, intersection1, intersection2, ID);
+                            outsideTriangle = triangle(triangleB, intersection1, intersection2, ID);
 
                             // calculate the outside triangles...
-                            insideTriangle1 = result->CreateTriangle(BSP::Mesh::IOFlag::INSIDE, intersection1, triangleC, triangleA, ID);
-                            insideTriangle2 = result->CreateTriangle(BSP::Mesh::IOFlag::INSIDE, triangleA, intersection2, intersection1, ID);
+                            insideTriangle1 = triangle(intersection1, triangleC, triangleA, ID);
+                            insideTriangle2 = triangle(triangleA, intersection2, intersection1, ID);
                         }
                         else if (cDirection > 0)
                         {
                             // a and b must be infront...
-                            result->vertices_.push_back(vectorOps.RayPlaneIntersectionPoint(C, vectorOps.Unitise(vectorOps.Subtract(C, A)), planePosition, planeNormal));
-                            result->vertices_.push_back(vectorOps.RayPlaneIntersectionPoint(C, vectorOps.Unitise(vectorOps.Subtract(C, B)), planePosition, planeNormal));
+                            output->vertices_.push_back(rayPlaneIntersection(C, unitise(subtract(C, A)), planePosition, planeNormal));
+                            output->vertices_.push_back(rayPlaneIntersection(C, unitise(subtract(C, B)), planePosition, planeNormal));
 
                             // calculate the inside triangle...
-                            outsideTriangle = result->CreateTriangle(BSP::Mesh::IOFlag::OUTSIDE, triangleC, intersection1, intersection2, ID);
+                            outsideTriangle = triangle(triangleC, intersection1, intersection2, ID);
 
                             // calculate the outside triangles...
-                            insideTriangle1 = result->CreateTriangle(BSP::Mesh::IOFlag::INSIDE, intersection1, triangleA, triangleB, ID);
-                            insideTriangle2 = result->CreateTriangle(BSP::Mesh::IOFlag::INSIDE, triangleB, intersection2, intersection1, ID);
+                            insideTriangle1 = triangle(intersection1, triangleA, triangleB, ID);
+                            insideTriangle2 = triangle(triangleB, intersection2, intersection1, ID);
                         }
 
                         // if the inside triangle is invalid... add the original triangle as the outside triangle.
-                        if (!result->ValidateTriangle(result->vertices_[outsideTriangle->a()], result->vertices_[outsideTriangle->b()], result->vertices_[outsideTriangle->c()], *outsideTriangle))
-                            result->inside_.push_back(result->CreateTriangle(BSP::Mesh::IOFlag::INSIDE, triangleA, triangleB, triangleC, ID));
+                        if (!validateTriangle(outsideTriangle, output->vertices_[outsideTriangle.a_], output->vertices_[outsideTriangle.b_], output->vertices_[outsideTriangle.c_]))
+                            output->insideTriangles_.push_back(triangle(triangleA, triangleB, triangleC, ID));
                         else
                         {
                             output->outsideTriangles_.push_back(outsideTriangle);
@@ -694,67 +762,67 @@ namespace qdcsg
         };
 
 
-        
-        
-    }
-
-
-
-    // Merge meshes...
-    std::shared_ptr<mesh> merge(const result& A, const std::vector<triangle>& aTriangles, const result& B, const std::vector<triangle>& bTriangles, bool flipB)
-    {
-        std::shared_ptr<mesh> result(new mesh());
-
-        unsigned int offset = A.vertices_.size();
-
-        result->vertices_.insert(result->vertices_.end(), A.vertices_.begin(), A.vertices_.end());
-        result->vertices_.insert(result->vertices_.end(), B.vertices_.begin(), B.vertices_.end());
-
-        result->triangles_.insert(result->triangles_.end(), aTriangles.begin(), aTriangles.end());
-        result->triangles_.insert(result->triangles_.end(), bTriangles.begin(), bTriangles.end());
-
-        // ammend the triangle indexes...
-        std::for_each(result->triangles_.begin() + aTriangles.size(), result->triangles_.end(), [&offset](triangle& t) { t.a_ += offset; t.b_ += offset; t.c_ += offset; });
-
-        // if required, flip b's triangles...
-        if (flipB)
-            std::for_each(result->triangles_.begin() + aTriangles.size(), result->triangles_.end(), [](triangle& t) { unsigned int c = t.c_; t.c_ = t.b_; t.b_ = c; });
-
-        // prune the mesh so that it only has vertices that are referenced by triangles...
-        std::vector<unsigned int> newIndexes(result->vertices_.size(), -1);
-        std::vector<vertex> newVertices;
-        const std::vector<vertex>& currentVertices = result->vertices_;
-        newVertices.reserve(result->vertices_.size());
-
-        std::for_each(result->triangles_.begin(), result->triangles_.end(), 
-            [&currentVertices, &newIndexes, &newVertices](triangle& t) 
+        // Merge meshes...
+        std::shared_ptr<mesh> merge(const result& A, const std::vector<triangle>& aTriangles, const result& B, const std::vector<triangle>& bTriangles, bool flipB)
         {
-            if (newIndexes[t.a_] == -1)
-            {
-                newVertices.push_back(currentVertices[t.a_]);
-                newIndexes[t.a_] = newVertices.size() - 1;
-            }
-            t.a_ = newIndexes[t.a_];
+            std::shared_ptr<mesh> result(new mesh());
 
-            if (newIndexes[t.b_] == -1)
-            {
-                newVertices.push_back(currentVertices[t.b_]);
-                newIndexes[t.b_] = newVertices.size() - 1;
-            }
-            t.b_ = newIndexes[t.b_];
+            unsigned int offset = static_cast<unsigned int>(A.vertices_.size());
 
-            if (newIndexes[t.c_] == -1)
+            result->vertices_.insert(result->vertices_.end(), A.vertices_.begin(), A.vertices_.end());
+            result->vertices_.insert(result->vertices_.end(), B.vertices_.begin(), B.vertices_.end());
+
+            result->triangles_.insert(result->triangles_.end(), aTriangles.begin(), aTriangles.end());
+            result->triangles_.insert(result->triangles_.end(), bTriangles.begin(), bTriangles.end());
+
+            // ammend the triangle indexes...
+            std::for_each(result->triangles_.begin() + aTriangles.size(), result->triangles_.end(), [&offset](triangle& t) { t.a_ += offset; t.b_ += offset; t.c_ += offset; });
+
+            // if required, flip b's triangles...
+            if (flipB)
+                std::for_each(result->triangles_.begin() + aTriangles.size(), result->triangles_.end(), [](triangle& t) { unsigned int c = t.c_; t.c_ = t.b_; t.b_ = c; });
+
+            // prune the mesh so that it only has vertices that are referenced by triangles...
+            std::vector<int> newIndexes(result->vertices_.size(), -1);
+            std::vector<vertex> newVertices;
+            const std::vector<vertex>& currentVertices = result->vertices_;
+            newVertices.reserve(result->vertices_.size());
+
+            std::for_each(result->triangles_.begin(), result->triangles_.end(),
+                [&currentVertices, &newIndexes, &newVertices](triangle& t)
             {
-                newVertices.push_back(currentVertices[t.c_]);
-                newIndexes[t.c_] = newVertices.size() - 1;
-            }
-            t.c_ = newIndexes[t.c_];
-        });
+                if (newIndexes[t.a_] == -1)
+                {
+                    newVertices.push_back(currentVertices[t.a_]);
+                    newIndexes[t.a_] = static_cast<int>(newVertices.size() - 1);
+                }
+                t.a_ = newIndexes[t.a_];
+
+                if (newIndexes[t.b_] == -1)
+                {
+                    newVertices.push_back(currentVertices[t.b_]);
+                    newIndexes[t.b_] = static_cast<int>(newVertices.size() - 1);
+                }
+                t.b_ = newIndexes[t.b_];
+
+                if (newIndexes[t.c_] == -1)
+                {
+                    newVertices.push_back(currentVertices[t.c_]);
+                    newIndexes[t.c_] = static_cast<int>(newVertices.size() - 1);
+                }
+                t.c_ = newIndexes[t.c_];
+            });
+
+            result->vertices_ = newVertices;
+
+            return result;
+        }
         
-        result->vertices_ = newVertices;
-
-        return result;
     }
+
+
+
+    
 
 
     std::shared_ptr<mesh> Difference(const mesh& A, const mesh& B)
@@ -765,7 +833,7 @@ namespace qdcsg
         result intersectedB = *treeA.intersect(B, true);
         result intersectedA = *treeB.intersect(A, true);
 
-        return merge(intersectedA, intersectedA.outsideTriangles_, intersectedB, intersectedB.insideTriangles_, true);
+        return impl::merge(intersectedA, intersectedA.outsideTriangles_, intersectedB, intersectedB.insideTriangles_, true);
     }
 
     std::shared_ptr<mesh> Intersection(const mesh& A, const mesh& B)
@@ -776,7 +844,7 @@ namespace qdcsg
         result intersectedB = *treeA.intersect(B, true);
         result intersectedA = *treeB.intersect(A, true);
 
-        return merge(intersectedA, intersectedA.insideTriangles_, intersectedB, intersectedB.insideTriangles_, false);
+        return impl::merge(intersectedA, intersectedA.insideTriangles_, intersectedB, intersectedB.insideTriangles_, false);
     }
 
     std::shared_ptr<mesh> Union(const mesh& A, const mesh& B)
@@ -787,7 +855,7 @@ namespace qdcsg
         result intersectedB = *treeA.intersect(B, true);
         result intersectedA = *treeB.intersect(A, true);
 
-        return merge(intersectedA, intersectedA.outsideTriangles_, intersectedB, intersectedB.outsideTriangles_, false);
+        return impl::merge(intersectedA, intersectedA.outsideTriangles_, intersectedB, intersectedB.outsideTriangles_, false);
     }
 
     
