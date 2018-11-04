@@ -831,7 +831,7 @@ namespace qdcsg
         impl::bspTree treeB(B);
 
         result intersectedB = *treeA.intersect(B, true);
-        result intersectedA = *treeB.intersect(A, true);
+        result intersectedA = *treeB.intersect(A, false);
 
         return impl::merge(intersectedA, intersectedA.outsideTriangles_, intersectedB, intersectedB.insideTriangles_, true);
     }
@@ -841,7 +841,7 @@ namespace qdcsg
         impl::bspTree treeA(A);
         impl::bspTree treeB(B);
 
-        result intersectedB = *treeA.intersect(B, true);
+        result intersectedB = *treeA.intersect(B, false);
         result intersectedA = *treeB.intersect(A, true);
 
         return impl::merge(intersectedA, intersectedA.insideTriangles_, intersectedB, intersectedB.insideTriangles_, false);
@@ -852,7 +852,7 @@ namespace qdcsg
         impl::bspTree treeA(A);
         impl::bspTree treeB(B);
 
-        result intersectedB = *treeA.intersect(B, true);
+        result intersectedB = *treeA.intersect(B, false);
         result intersectedA = *treeB.intersect(A, true);
 
         return impl::merge(intersectedA, intersectedA.outsideTriangles_, intersectedB, intersectedB.outsideTriangles_, false);
