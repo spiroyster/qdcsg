@@ -493,7 +493,7 @@ namespace qdcsg
                                     currentNode = 0;
                                 }
                             }
-                            else if (splitResult->outsideTriangles_.size() == 1 && splitResult->outsideTriangles_.empty())
+                            else if (splitResult->outsideTriangles_.size() == 1 && splitResult->insideTriangles_.empty())
                             {
                                 // follow the outside branch/path...
                                 if (currentNode->outside_)
