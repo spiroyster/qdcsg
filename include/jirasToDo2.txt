@@ -1,0 +1,6 @@
+Jiras...
+
+Camera Animations
+Seperate Tree/Model Hierachy
+Default camera position
+Update build scripts
