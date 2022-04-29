@@ -31,8 +31,8 @@
 #include <list>
 #include <memory>
 #include <vector>
-#include <string>
 #include <cmath>
+#include <stdexcept>
 
 namespace qdcsg
 {
@@ -159,7 +159,7 @@ namespace qdcsg
                 float s = dot(subtract(pP, rP), pN) / dotrDpN;
                 return vertex(rP.x_ + (rD.x_ * s), rP.y_ + (rD.y_ * s), rP.z_ + (rD.z_ * s));
             }
-            throw std::string("RayAndPlaneNormalAreParrallel");
+            throw std::runtime_error("RayAndPlaneNormalAreParrallel");
         }
 
         class bspTree
@@ -193,7 +193,7 @@ namespace qdcsg
 
                     // vertices should already be present in tree... these are added upon construction...
                     if (std::isnan(normal_.x_) || std::isnan(normal_.y_) || std::isnan(normal_.z_))
-                        throw std::string("BSPTreeNodeUnableToConstruct");
+                        throw std::runtime_error("BSPTreeNodeUnableToConstruct");
                 }
 
                 std::unique_ptr<node> inside_;
@@ -617,7 +617,7 @@ namespace qdcsg
                         }
                     }
                     else
-                        throw std::string("CSGSplitInvalid");
+                        throw std::runtime_error("CSGSplitInvalid");
 
                     if (validateTriangle(insideTriangle, output->vertices_[insideTriangle.a_], output->vertices_[insideTriangle.b_], output->vertices_[insideTriangle.c_]))
                         output->insideTriangles_.push_back(insideTriangle);
