@@ -8,7 +8,7 @@ int main(int argc, char** agrv)
     qdcsg::mesh A;
     qdcsg::mesh B;
 
-    std::shared_ptr<qdcsg::mesh> AdiffB = qdcsg::difference(A, B);
+    std::shared_ptr<qdcsg::mesh> AdiffB = qdcsg::Difference(A, B);
 
 
 
